@@ -15,7 +15,7 @@ El software incluido es una **recreación experimental básica** orientada únic
 
 ## 🎮 Probar el Simulador en Línea
 Puedes ejecutar e interactuar con la simulación directamente desde tu navegador web y sin necesidad de descargar componentes adicionales haciendo clic en el siguiente enlace:
-👉 **[(https://deaconzarathos.github.io/polybius-1981-simulation/)]** *(Ver paso 4 para completar este link)*
+👉 **[(https://deaconzarathos.github.io/polybius-1981-simulation/)]**
 
 ---
 
