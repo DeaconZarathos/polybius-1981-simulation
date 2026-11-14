@@ -1,0 +1,1356 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>POLYBIUS // © 1981 SINNESLÖSCHEN INC.</title>
+  <style>
+    /* ==========================================================================
+       ESTÉTICA ARCADE VECTORIAL CRT (1981) - ZERO DEPENDENCIES
+       ========================================================================== */
+    :root {
+      --crt-bg: #030306;
+      --neon-cyan: #00f7ff;
+      --neon-magenta: #ff0055;
+      --neon-lime: #39ff14;
+      --neon-amber: #ffbe0b;
+      --hud-font: 'Courier New', Courier, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background-color: #000;
+      color: var(--neon-cyan);
+      font-family: var(--hud-font);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Marco físico del monitor CRT de salón recreativo */
+    #arcade-cabinet {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      max-width: 100%;
+      max-height: 100%;
+      background: radial-gradient(circle at center, #080812 0%, #010103 100%);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Curvatura sutil, viñeta y scanlines CRT por hardware GPU */
+    #crt-overlay {
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      background:
+        linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.38) 50%),
+        linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+      background-size: 100% 3px, 6px 100%;
+      box-shadow: inset 0 0 90px rgba(0, 0, 0, 0.92);
+    }
+
+    /* Barra superior de telemetría y controles rápidos */
+    #top-hud {
+      position: relative;
+      z-index: 30;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 18px;
+      background: rgba(2, 4, 10, 0.85);
+      border-bottom: 1px solid rgba(0, 247, 255, 0.35);
+      text-shadow: 0 0 8px currentColor;
+      font-size: clamp(11px, 1.8vw, 15px);
+      letter-spacing: 1.5px;
+      gap: 8px;
+    }
+
+    .hud-group {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .hud-label {
+      opacity: 0.75;
+      font-size: 0.85em;
+    }
+
+    .hud-value {
+      font-weight: bold;
+      color: #fff;
+      text-shadow: 0 0 10px var(--neon-cyan);
+    }
+
+    /* Botones estilo recreativa con retroiluminación */
+    .arcade-btn {
+      background: rgba(0, 247, 255, 0.08);
+      color: var(--neon-cyan);
+      border: 1px solid var(--neon-cyan);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-family: var(--hud-font);
+      font-size: clamp(10px, 1.5vw, 13px);
+      font-weight: bold;
+      letter-spacing: 1px;
+      cursor: pointer;
+      text-transform: uppercase;
+      box-shadow: 0 0 8px rgba(0, 247, 255, 0.25), inset 0 0 6px rgba(0, 247, 255, 0.15);
+      transition: transform 0.08s ease, background 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .arcade-btn:hover {
+      background: rgba(0, 247, 255, 0.22);
+      box-shadow: 0 0 14px rgba(0, 247, 255, 0.6);
+    }
+
+    .arcade-btn:active {
+      transform: scale(0.95);
+    }
+
+    .arcade-btn.active-safe {
+      border-color: var(--neon-lime);
+      color: var(--neon-lime);
+      background: rgba(57, 255, 20, 0.15);
+      box-shadow: 0 0 12px rgba(57, 255, 20, 0.45);
+    }
+
+    .arcade-btn.danger {
+      border-color: var(--neon-magenta);
+      color: var(--neon-magenta);
+      box-shadow: 0 0 10px rgba(255, 0, 85, 0.35);
+    }
+
+    /* Contenedor fluido del Canvas principal */
+    #canvas-wrapper {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Controles táctiles inferiores (visibles y accesibles fuera del área crítica) */
+    #touch-controls {
+      position: relative;
+      z-index: 30;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 20px;
+      background: rgba(2, 4, 10, 0.88);
+      border-top: 1px solid rgba(0, 247, 255, 0.25);
+      gap: 12px;
+    }
+
+    .dpad-group {
+      display: flex;
+      gap: 12px;
+    }
+
+    .ctrl-pad {
+      min-width: 68px;
+      min-height: 44px;
+      border-radius: 10px;
+      font-size: 15px;
+      background: linear-gradient(180deg, rgba(0, 247, 255, 0.16), rgba(0, 247, 255, 0.04));
+    }
+
+    .fire-pad {
+      min-width: 120px;
+      min-height: 44px;
+      border-radius: 10px;
+      border-color: var(--neon-magenta);
+      color: #fff;
+      background: linear-gradient(180deg, rgba(255, 0, 85, 0.35), rgba(255, 0, 85, 0.12));
+      box-shadow: 0 0 14px rgba(255, 0, 85, 0.45);
+    }
+
+    /* Aviso discreto de fotosensibilidad en pantalla de inicio */
+    #epilepsy-banner {
+      position: absolute;
+      bottom: 68px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 25;
+      background: rgba(0, 0, 0, 0.82);
+      border: 1px solid rgba(255, 190, 11, 0.6);
+      color: var(--neon-amber);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: clamp(10px, 1.4vw, 12px);
+      text-align: center;
+      max-width: 92%;
+      pointer-events: none;
+    }
+
+    @media (min-width: 900px) {
+      /* En escritorio mantiene botones compactos para no robar espacio */
+      .ctrl-pad, .fire-pad {
+        min-height: 36px;
+        padding: 4px 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="arcade-cabinet">
+    <!-- Efecto visual CRT (Scanlines + Viñeta) -->
+    <div id="crt-overlay"></div>
+
+    <!-- Telemetría Superior -->
+    <header id="top-hud">
+      <div class="hud-group">
+        <div><span class="hud-label">1UP </span><span id="hud-score" class="hud-value">000000</span></div>
+        <div><span class="hud-label">HI </span><span id="hud-high" class="hud-value">019810</span></div>
+        <div><span class="hud-label">SECTOR </span><span id="hud-wave" class="hud-value">01</span></div>
+      </div>
+
+      <div class="hud-group">
+        <div><span class="hud-label">NEURAL SYNC </span><span id="hud-sync" class="hud-value">100%</span></div>
+        <button id="btn-safe" class="arcade-btn" title="Reduce destellos estroboscópicos">SAFE MODE: OFF</button>
+        <button id="btn-mute" class="arcade-btn" title="Silenciar sintetizador">AUDIO: ON</button>
+        <button id="btn-pause" class="arcade-btn" title="Pausar simulación">PAUSE</button>
+      </div>
+    </header>
+
+    <!-- Área Principal de Renderizado Vectorial -->
+    <main id="canvas-wrapper">
+      <canvas id="polybius-canvas"></canvas>
+      <div id="epilepsy-banner">
+        AVISO: CONTIENE DESTELLOS ESTROBOSCÓPICOS Y PATRONES HIPNÓTICOS. USA [SAFE MODE] SI ERES FOTOSENSIBLE.
+      </div>
+    </main>
+
+    <!-- Controles Táctiles / Alternativos Exteriores al Canvas -->
+    <footer id="touch-controls">
+      <div class="dpad-group">
+        <button id="btn-left" class="arcade-btn ctrl-pad" aria-label="Rotar Izquierda">◄ ROT L</button>
+        <button id="btn-right" class="arcade-btn ctrl-pad" aria-label="Rotar Derecha">ROT R ►</button>
+      </div>
+      <div style="font-size: 11px; opacity: 0.7; text-align: center; display: none;" class="desktop-hint">
+        [←/→ o A/D] ROTAR • [ESPACIO] DISPARAR • [P] PAUSA • [M] AUDIO
+      </div>
+      <button id="btn-fire" class="arcade-btn fire-pad" aria-label="Disparar Láser">FIRE [SPACE]</button>
+    </footer>
+  </div>
+
+  <script>
+    /**
+     * ============================================================================
+     * POLYBIUS (© 1981 SINNESLÖSCHEN INC.) - MOTOR ARCADE VECTORIAL + WEB AUDIO
+     * Arquitectura optimizada a 60 FPS con Object Pooling y cero dependencias.
+     * ============================================================================
+     */
+
+    (() => {
+      'use strict';
+
+      // --------------------------------------------------------------------------
+      // 1. SINTETIZADOR DE AUDIO PROCEDURAL (WEB AUDIO API PURO)
+      // --------------------------------------------------------------------------
+      class PolybiusAudioEngine {
+        constructor() {
+          this.ctx = null;
+          this.masterGain = null;
+          this.droneOsc1 = null;
+          this.droneOsc2 = null;
+          this.droneFilter = null;
+          this.droneGain = null;
+          this.noiseBuffer = null;
+          this.muted = false;
+          this.initialized = false;
+        }
+
+        init() {
+          if (this.initialized) {
+            if (this.ctx && this.ctx.state === 'suspended') {
+              this.ctx.resume();
+            }
+            return;
+          }
+          try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioCtx();
+
+            this.masterGain = this.ctx.createGain();
+            this.masterGain.gain.value = this.muted ? 0 : 0.38;
+            this.masterGain.connect(this.ctx.destination);
+
+            // Pre-generar buffer de ruido blanco de 1 segundo para explosiones retro
+            const sampleRate = this.ctx.sampleRate;
+            this.noiseBuffer = this.ctx.createBuffer(1, sampleRate, sampleRate);
+            const data = this.noiseBuffer.getChannelData(0);
+            for (let i = 0; i < sampleRate; i++) {
+              data[i] = Math.random() * 2 - 1;
+            }
+
+            // Dron binaural hipnótico continuo (onda triangular + sierra grave filtrada)
+            this.droneOsc1 = this.ctx.createOscillator();
+            this.droneOsc2 = this.ctx.createOscillator();
+            this.droneFilter = this.ctx.createBiquadFilter();
+            this.droneGain = this.ctx.createGain();
+
+            this.droneOsc1.type = 'sawtooth';
+            this.droneOsc2.type = 'triangle';
+            this.droneOsc1.frequency.value = 55; // La1 grave
+            this.droneOsc2.frequency.value = 58.5; // Batido binaural de 3.5 Hz (ondas Theta)
+
+            this.droneFilter.type = 'lowpass';
+            this.droneFilter.frequency.value = 140;
+            this.droneFilter.Q.value = 6;
+
+            this.droneGain.gain.value = 0.0; // Se activa al iniciar partida
+
+            this.droneOsc1.connect(this.droneFilter);
+            this.droneOsc2.connect(this.droneFilter);
+            this.droneFilter.connect(this.droneGain);
+            this.droneGain.connect(this.masterGain);
+
+            this.droneOsc1.start();
+            this.droneOsc2.start();
+            this.initialized = true;
+          } catch (e) {
+            console.warn('Web Audio API no disponible:', e);
+          }
+        }
+
+        setMute(mute) {
+          this.muted = mute;
+          if (this.masterGain && this.ctx) {
+            this.masterGain.gain.setTargetAtTime(mute ? 0 : 0.38, this.ctx.currentTime, 0.03);
+          }
+        }
+
+        updateDrone(intensity, isPlaying) {
+          if (!this.initialized || !this.ctx) return;
+          const now = this.ctx.currentTime;
+          if (!isPlaying) {
+            this.droneGain.gain.setTargetAtTime(0.02, now, 0.2);
+            return;
+          }
+          // Escala la frecuencia y apertura del filtro según el nivel de hipnosis
+          const baseFreq = 55 + intensity * 18;
+          this.droneOsc1.frequency.setTargetAtTime(baseFreq, now, 0.15);
+          this.droneOsc2.frequency.setTargetAtTime(baseFreq + 4 + intensity * 3, now, 0.15);
+          this.droneFilter.frequency.setTargetAtTime(140 + intensity * 260, now, 0.15);
+          this.droneGain.gain.setTargetAtTime(0.18, now, 0.2);
+        }
+
+        playLaser() {
+          if (!this.initialized || this.muted) return;
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(980, now);
+          osc.frequency.exponentialRampToValueAtTime(140, now + 0.11);
+
+          gain.gain.setValueAtTime(0.22, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+
+          osc.connect(gain);
+          gain.connect(this.masterGain);
+
+          osc.start(now);
+          osc.stop(now + 0.12);
+        }
+
+        playExplosion(pitchScale = 1.0) {
+          if (!this.initialized || this.muted || !this.noiseBuffer) return;
+          const now = this.ctx.currentTime;
+          const src = this.ctx.createBufferSource();
+          src.buffer = this.noiseBuffer;
+
+          const filter = this.ctx.createBiquadFilter();
+          filter.type = 'bandpass';
+          filter.frequency.setValueAtTime(420 * pitchScale, now);
+          filter.frequency.exponentialRampToValueAtTime(70, now + 0.32);
+          filter.Q.value = 1.8;
+
+          const gain = this.ctx.createGain();
+          gain.gain.setValueAtTime(0.45, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
+
+          src.connect(filter);
+          filter.connect(gain);
+          gain.connect(this.masterGain);
+
+          src.start(now);
+          src.stop(now + 0.35);
+        }
+
+        playSubliminalPulse() {
+          if (!this.initialized || this.muted) return;
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(110, now);
+          osc.frequency.linearRampToValueAtTime(660, now + 0.08);
+
+          gain.gain.setValueAtTime(0.14, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+
+          osc.connect(gain);
+          gain.connect(this.masterGain);
+          osc.start(now);
+          osc.stop(now + 0.1);
+        }
+
+        playDamage() {
+          if (!this.initialized || this.muted) return;
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(190, now);
+          osc.frequency.linearRampToValueAtTime(38, now + 0.45);
+
+          gain.gain.setValueAtTime(0.5, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.46);
+
+          osc.connect(gain);
+          gain.connect(this.masterGain);
+          osc.start(now);
+          osc.stop(now + 0.48);
+        }
+      }
+
+      // --------------------------------------------------------------------------
+      // 2. CONFIGURACIÓN GLOBAL Y ESTADO DEL MOTOR
+      // --------------------------------------------------------------------------
+      const canvas = document.getElementById('polybius-canvas');
+      const ctx = canvas.getContext('2d', { alpha: false });
+      const audio = new PolybiusAudioEngine();
+
+      // Elementos HUD
+      const elScore = document.getElementById('hud-score');
+      const elHigh = document.getElementById('hud-high');
+      const elWave = document.getElementById('hud-wave');
+      const elSync = document.getElementById('hud-sync');
+      const btnSafe = document.getElementById('btn-safe');
+      const btnMute = document.getElementById('btn-mute');
+      const btnPause = document.getElementById('btn-pause');
+      const bannerEpilepsy = document.getElementById('epilepsy-banner');
+
+      // Mensajes subliminales clásicos de la leyenda de Portland 1981
+      const SUBLIMINAL_WORDS = [
+        'OBEY',
+        'CONSUME',
+        'CONFORM',
+        'SUBMIT',
+        'DO NOT THINK',
+        'SLEEP',
+        'SURRENDER',
+        'NO ESCAPE',
+        'SINNESLÖSCHEN',
+        'WATCH THE CENTER'
+      ];
+
+      // Estado principal del juego
+      const state = {
+        mode: 'ATTRACT', // 'ATTRACT' | 'PLAYING' | 'PAUSED' | 'GAMEOVER'
+        width: 800,
+        height: 600,
+        cx: 400,
+        cy: 300,
+        maxRadius: 280,
+        time: 0,
+        score: 0,
+        highScore: parseInt(localStorage.getItem('polybius_1981_hi') || '19810', 10),
+        wave: 1,
+        neuralSync: 100,
+        safeMode: false,
+        hypnosisLevel: 0.15, // 0.0 -> 1.0+ según puntuación y oleada
+        baseHue: 185,
+        screenShake: 0,
+        chromaticShift: 0,
+        subliminalTimer: 2.5,
+        subliminalFramesLeft: 0,
+        subliminalCurrentWord: 'OBEY',
+        spawnTimer: 0,
+        player: {
+          angle: Math.PI * 0.5, // Empieza abajo (90 grados)
+          angularVel: 0,
+          fireCooldown: 0,
+          invulnTimer: 0
+        },
+        keys: {
+          left: false,
+          right: false,
+          fire: false
+        }
+      };
+
+      elHigh.textContent = String(state.highScore).padStart(6, '0');
+
+      // --------------------------------------------------------------------------
+      // 3. OBJECT POOLING (CERO ASIGNACIONES DE MEMORIA EN EL BUCLE DE JUEGO)
+      // --------------------------------------------------------------------------
+      const MAX_BULLETS = 48;
+      const MAX_ENEMIES = 36;
+      const MAX_PARTICLES = 160;
+
+      const bullets = Array.from({ length: MAX_BULLETS }, () => ({
+        active: false,
+        angle: 0,
+        depth: 1.0, // 1.0 = perímetro exterior, 0.0 = punto de fuga central
+        speed: 2.3
+      }));
+
+      // Tipos de enemigos geométricos vectoriales:
+      // 0: Triángulo rotatorio, 1: Cubo hipercúbico, 2: Icosaedro fractal, 3: Anillo pulsante
+      const enemies = Array.from({ length: MAX_ENEMIES }, () => ({
+        active: false,
+        type: 0,
+        angle: 0,
+        spinAngle: 0,
+        angularDrift: 0,
+        depth: 0.02, // Emerge del punto de fuga (0.02) hacia el jugador (1.0)
+        speed: 0.25,
+        hp: 1,
+        maxHp: 1,
+        hueOffset: 0
+      }));
+
+      const particles = Array.from({ length: MAX_PARTICLES }, () => ({
+        active: false,
+        x: 0,
+        y: 0,
+        vx: 0,
+        vy: 0,
+        life: 0,
+        maxLife: 1,
+        hue: 180
+      }));
+
+      function spawnBullet(angle) {
+        for (let i = 0; i < MAX_BULLETS; i++) {
+          const b = bullets[i];
+          if (!b.active) {
+            b.active = true;
+            b.angle = angle;
+            b.depth = 0.96;
+            b.speed = 2.4;
+            return;
+          }
+        }
+      }
+
+      function spawnEnemy() {
+        for (let i = 0; i < MAX_ENEMIES; i++) {
+          const e = enemies[i];
+          if (!e.active) {
+            const waveFactor = Math.min(state.wave, 12);
+            const type = Math.floor(Math.random() * Math.min(4, 1 + Math.floor((state.wave + 1) / 2)));
+            e.active = true;
+            e.type = type;
+            e.angle = Math.random() * Math.PI * 2;
+            e.spinAngle = Math.random() * Math.PI * 2;
+            e.angularDrift = (Math.random() - 0.5) * (0.6 + waveFactor * 0.14);
+            e.depth = 0.015;
+            e.speed = 0.22 + Math.random() * 0.14 + waveFactor * 0.022;
+            e.maxHp = type === 2 ? 3 : type === 1 ? 2 : 1;
+            e.hp = e.maxHp;
+            e.hueOffset = Math.random() * 140;
+            return;
+          }
+        }
+      }
+
+      function spawnExplosion(x, y, hue, count = 16) {
+        let spawned = 0;
+        for (let i = 0; i < MAX_PARTICLES && spawned < count; i++) {
+          const p = particles[i];
+          if (!p.active) {
+            const ang = (Math.PI * 2 * spawned) / count + (Math.random() - 0.5) * 0.4;
+            const spd = 70 + Math.random() * 210;
+            p.active = true;
+            p.x = x;
+            p.y = y;
+            p.vx = Math.cos(ang) * spd;
+            p.vy = Math.sin(ang) * spd;
+            p.life = 0;
+            p.maxLife = 0.35 + Math.random() * 0.35;
+            p.hue = hue;
+            spawned++;
+          }
+        }
+      }
+
+      function resetEntities() {
+        for (let i = 0; i < MAX_BULLETS; i++) bullets[i].active = false;
+        for (let i = 0; i < MAX_ENEMIES; i++) enemies[i].active = false;
+        for (let i = 0; i < MAX_PARTICLES; i++) particles[i].active = false;
+      }
+
+      // --------------------------------------------------------------------------
+      // 4. ADAPTACIÓN RESPONSIVA DEL CANVAS (RETINA / HIGH-DPI SAFE)
+      // --------------------------------------------------------------------------
+      function resizeCanvas() {
+        const wrapper = document.getElementById('canvas-wrapper');
+        const rect = wrapper.getBoundingClientRect();
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+        state.width = Math.max(300, rect.width);
+        state.height = Math.max(240, rect.height);
+
+        canvas.width = Math.floor(state.width * dpr);
+        canvas.height = Math.floor(state.height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        state.cx = state.width * 0.5;
+        state.cy = state.height * 0.5;
+        state.maxRadius = Math.min(state.width, state.height) * 0.43;
+      }
+
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+
+      // --------------------------------------------------------------------------
+      // 5. FLUJO DE PARTIDA Y CONTROLES DE INTERFAZ
+      // --------------------------------------------------------------------------
+      function startGame() {
+        audio.init();
+        resetEntities();
+        state.mode = 'PLAYING';
+        state.score = 0;
+        state.wave = 1;
+        state.neuralSync = 100;
+        state.hypnosisLevel = 0.2;
+        state.player.angle = Math.PI * 0.5;
+        state.player.angularVel = 0;
+        state.player.invulnTimer = 1.5;
+        state.spawnTimer = 0.5;
+        bannerEpilepsy.style.display = 'none';
+        btnPause.textContent = 'PAUSE';
+        updateHud();
+      }
+
+      function updateHud() {
+        elScore.textContent = String(Math.floor(state.score)).padStart(6, '0');
+        if (state.score > state.highScore) {
+          state.highScore = Math.floor(state.score);
+          elHigh.textContent = String(state.highScore).padStart(6, '0');
+          try {
+            localStorage.setItem('polybius_1981_hi', String(state.highScore));
+          } catch (_) {}
+        }
+        elWave.textContent = String(state.wave).padStart(2, '0');
+        elSync.textContent = `${Math.max(0, Math.ceil(state.neuralSync))}%`;
+        elSync.style.color = state.neuralSync <= 30 ? '#ff0055' : '#ffffff';
+      }
+
+      // Botones superiores
+      btnSafe.addEventListener('click', () => {
+        state.safeMode = !state.safeMode;
+        btnSafe.textContent = state.safeMode ? 'SAFE MODE: ON' : 'SAFE MODE: OFF';
+        btnSafe.classList.toggle('active-safe', state.safeMode);
+      });
+
+      btnMute.addEventListener('click', () => {
+        audio.init();
+        const nextMute = !audio.muted;
+        audio.setMute(nextMute);
+        btnMute.textContent = nextMute ? 'AUDIO: OFF' : 'AUDIO: ON';
+        btnMute.classList.toggle('danger', nextMute);
+      });
+
+      btnPause.addEventListener('click', () => {
+        if (state.mode === 'PLAYING') {
+          state.mode = 'PAUSED';
+          btnPause.textContent = 'RESUME';
+          audio.updateDrone(0, false);
+        } else if (state.mode === 'PAUSED') {
+          state.mode = 'PLAYING';
+          btnPause.textContent = 'PAUSE';
+        }
+      });
+
+      // Controles de teclado
+      window.addEventListener('keydown', (e) => {
+        if (['ArrowLeft', 'ArrowRight', 'Space', ' '].includes(e.key)) {
+          e.preventDefault();
+        }
+        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') state.keys.left = true;
+        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') state.keys.right = true;
+        if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter') {
+          if (state.mode === 'ATTRACT' || state.mode === 'GAMEOVER') {
+            startGame();
+          } else {
+            state.keys.fire = true;
+          }
+        }
+        if (e.key === 'p' || e.key === 'P') btnPause.click();
+        if (e.key === 'm' || e.key === 'M') btnMute.click();
+      });
+
+      window.addEventListener('keyup', (e) => {
+        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') state.keys.left = false;
+        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') state.keys.right = false;
+        if (e.key === ' ' || e.key === 'Spacebar') state.keys.fire = false;
+      });
+
+      // Controles táctiles y ratón (en botones inferiores y canvas)
+      function bindHoldButton(btn, keyProp) {
+        const start = (e) => {
+          e.preventDefault();
+          audio.init();
+          if (keyProp === 'fire' && (state.mode === 'ATTRACT' || state.mode === 'GAMEOVER')) {
+            startGame();
+            return;
+          }
+          state.keys[keyProp] = true;
+        };
+        const end = (e) => {
+          e.preventDefault();
+          state.keys[keyProp] = false;
+        };
+        btn.addEventListener('mousedown', start);
+        btn.addEventListener('touchstart', start, { passive: false });
+        btn.addEventListener('mouseup', end);
+        btn.addEventListener('mouseleave', end);
+        btn.addEventListener('touchend', end);
+      }
+
+      bindHoldButton(document.getElementById('btn-left'), 'left');
+      bindHoldButton(document.getElementById('btn-right'), 'right');
+      bindHoldButton(document.getElementById('btn-fire'), 'fire');
+
+      // Clic / toque directo sobre el canvas para iniciar partida o apuntar por ángulo
+      canvas.addEventListener('pointerdown', (e) => {
+        audio.init();
+        if (state.mode === 'ATTRACT' || state.mode === 'GAMEOVER') {
+          startGame();
+          return;
+        }
+        if (state.mode === 'PLAYING') {
+          const rect = canvas.getBoundingClientRect();
+          const px = e.clientX - rect.left;
+          const py = e.clientY - rect.top;
+          state.player.angle = Math.atan2(py - state.cy, px - state.cx);
+          state.keys.fire = true;
+        }
+      });
+
+      canvas.addEventListener('pointermove', (e) => {
+        if (state.mode === 'PLAYING' && e.buttons > 0) {
+          const rect = canvas.getBoundingClientRect();
+          const px = e.clientX - rect.left;
+          const py = e.clientY - rect.top;
+          state.player.angle = Math.atan2(py - state.cy, px - state.cx);
+        }
+      });
+
+      canvas.addEventListener('pointerup', () => {
+        state.keys.fire = false;
+      });
+
+      // --------------------------------------------------------------------------
+      // 6. ACTUALIZACIÓN DE LÓGICA Y FÍSICA VECTORIAL (DELTA-TIME)
+      // --------------------------------------------------------------------------
+      function update(dt) {
+        state.time += dt;
+
+        // Decaimiento de sacudida de cámara y aberración cromática
+        state.screenShake = Math.max(0, state.screenShake - dt * 28);
+        state.chromaticShift = Math.max(0, state.chromaticShift - dt * 16);
+
+        // Temporizador de destellos subliminales (1-2 frames)
+        if (state.subliminalFramesLeft > 0) {
+          state.subliminalFramesLeft--;
+        } else {
+          state.subliminalTimer -= dt;
+          if (state.subliminalTimer <= 0) {
+            state.subliminalCurrentWord =
+              SUBLIMINAL_WORDS[Math.floor(Math.random() * SUBLIMINAL_WORDS.length)];
+            state.subliminalFramesLeft = state.safeMode ? 1 : 2;
+            // Intervalo más corto a mayor nivel de hipnosis
+            const minGap = state.safeMode ? 6.5 : Math.max(2.2, 5.5 - state.hypnosisLevel * 2.5);
+            state.subliminalTimer = minGap + Math.random() * 3.5;
+            if (!state.safeMode && state.mode === 'PLAYING') {
+              audio.playSubliminalPulse();
+            }
+          }
+        }
+
+        // Rotación cromática psicodélica
+        const hueSpeed = state.safeMode ? 18 : 55 + state.hypnosisLevel * 120;
+        state.baseHue = (state.baseHue + dt * hueSpeed) % 360;
+
+        if (state.mode !== 'PLAYING') {
+          audio.updateDrone(0, false);
+          updateParticles(dt);
+          return;
+        }
+
+        // Calcular oleada y nivel de hipnosis según puntuación
+        state.wave = 1 + Math.floor(state.score / 2500);
+        state.hypnosisLevel = Math.min(1.5, 0.2 + state.score / 18000);
+        audio.updateDrone(state.hypnosisLevel, true);
+
+        // Movimiento angular suave del jugador alrededor del perímetro del túnel
+        const accel = 18.0;
+        const maxSpeed = 4.6;
+        const friction = 0.84;
+
+        if (state.keys.left) state.player.angularVel -= accel * dt;
+        if (state.keys.right) state.player.angularVel += accel * dt;
+
+        state.player.angularVel *= Math.pow(friction, dt * 60);
+        if (state.player.angularVel > maxSpeed) state.player.angularVel = maxSpeed;
+        if (state.player.angularVel < -maxSpeed) state.player.angularVel = -maxSpeed;
+
+        state.player.angle += state.player.angularVel * dt;
+        if (state.player.invulnTimer > 0) state.player.invulnTimer -= dt;
+
+        // Disparo láser vectorial
+        if (state.player.fireCooldown > 0) state.player.fireCooldown -= dt;
+        if (state.keys.fire && state.player.fireCooldown <= 0) {
+          spawnBullet(state.player.angle);
+          state.player.fireCooldown = 0.13;
+          audio.playLaser();
+        }
+
+        // Generación progresiva de enemigos geométricos
+        state.spawnTimer -= dt;
+        if (state.spawnTimer <= 0) {
+          spawnEnemy();
+          const spawnInterval = Math.max(0.32, 1.15 - state.wave * 0.075);
+          state.spawnTimer = spawnInterval;
+        }
+
+        // Actualizar proyectiles hacia el centro del túnel
+        for (let i = 0; i < MAX_BULLETS; i++) {
+          const b = bullets[i];
+          if (!b.active) continue;
+          b.depth -= b.speed * dt;
+          if (b.depth <= 0.02) {
+            b.active = false;
+          }
+        }
+
+        // Actualizar enemigos y colisiones radiales
+        for (let i = 0; i < MAX_ENEMIES; i++) {
+          const e = enemies[i];
+          if (!e.active) continue;
+
+          e.depth += e.speed * dt;
+          e.angle += e.angularDrift * dt;
+          e.spinAngle += (1.8 + e.type * 0.7) * dt;
+
+          // Comprobar impacto con proyectiles del jugador
+          for (let j = 0; j < MAX_BULLETS; j++) {
+            const b = bullets[j];
+            if (!b.active) continue;
+
+            const depthDiff = Math.abs(e.depth - b.depth);
+            const angleDiff = Math.abs(Math.atan2(Math.sin(e.angle - b.angle), Math.cos(e.angle - b.angle)));
+            // Tolerancia angular mayor cerca del centro donde los carriles se estrechan
+            const hitArc = 0.14 + (1 - e.depth) * 0.18;
+
+            if (depthDiff < 0.07 && angleDiff < hitArc) {
+              b.active = false;
+              e.hp--;
+              const ex = state.cx + Math.cos(e.angle) * (e.depth * state.maxRadius);
+              const ey = state.cy + Math.sin(e.angle) * (e.depth * state.maxRadius);
+
+              if (e.hp <= 0) {
+                e.active = false;
+                state.score += (e.type + 1) * 150 * state.wave;
+                state.neuralSync = Math.min(100, state.neuralSync + 1.5);
+                state.screenShake = Math.min(12, state.screenShake + 4.5);
+                state.chromaticShift = Math.min(9, state.chromaticShift + 4);
+                spawnExplosion(ex, ey, (state.baseHue + e.hueOffset) % 360, 18);
+                audio.playExplosion(0.85 + Math.random() * 0.4);
+                updateHud();
+              } else {
+                spawnExplosion(ex, ey, 60, 6);
+                audio.playExplosion(1.6);
+              }
+              break;
+            }
+          }
+
+          if (!e.active) continue;
+
+          // Comprobar si el enemigo alcanza el anillo exterior (perímetro del jugador)
+          if (e.depth >= 0.98) {
+            e.active = false;
+            const playerDiff = Math.abs(
+              Math.atan2(Math.sin(e.angle - state.player.angle), Math.cos(e.angle - state.player.angle))
+            );
+            const isDirectHit = playerDiff < 0.24;
+
+            if (state.player.invulnTimer <= 0) {
+              const damage = isDirectHit ? 28 : 14;
+              state.neuralSync -= damage;
+              state.screenShake = 14;
+              state.chromaticShift = 10;
+              const px = state.cx + Math.cos(e.angle) * state.maxRadius;
+              const py = state.cy + Math.sin(e.angle) * state.maxRadius;
+              spawnExplosion(px, py, 345, 22);
+              audio.playDamage();
+
+              if (state.neuralSync <= 0) {
+                state.neuralSync = 0;
+                state.mode = 'GAMEOVER';
+                bannerEpilepsy.style.display = 'block';
+              }
+              updateHud();
+            }
+          }
+        }
+
+        updateParticles(dt);
+      }
+
+      function updateParticles(dt) {
+        for (let i = 0; i < MAX_PARTICLES; i++) {
+          const p = particles[i];
+          if (!p.active) continue;
+          p.life += dt;
+          if (p.life >= p.maxLife) {
+            p.active = false;
+            continue;
+          }
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.vx *= 0.96;
+          p.vy *= 0.96;
+        }
+      }
+
+      // --------------------------------------------------------------------------
+      // 7. MOTOR DE RENDERIZADO VECTORIAL CRT (1981 TEMPEST / POLYBIUS STYLE)
+      // --------------------------------------------------------------------------
+      function render() {
+        const { width, height, cx, cy, maxRadius, time, baseHue, safeMode } = state;
+
+        // Fondo negro profundo con leve estela de fósforo
+        ctx.fillStyle = '#030307';
+        ctx.fillRect(0, 0, width, height);
+
+        // Destello estroboscópico sutil controlado (desactivado en SAFE MODE)
+        if (!safeMode && state.mode === 'PLAYING') {
+          const strobePulse = Math.sin(time * (18 + state.hypnosisLevel * 22));
+          if (strobePulse > 0.94) {
+            ctx.fillStyle = `hsla(${(baseHue + 180) % 360}, 100%, 50%, 0.07)`;
+            ctx.fillRect(0, 0, width, height);
+          }
+        }
+
+        ctx.save();
+
+        // Aplicar sacudida de cámara
+        if (state.screenShake > 0.1) {
+          const sx = (Math.random() - 0.5) * state.screenShake;
+          const sy = (Math.random() - 0.5) * state.screenShake;
+          ctx.translate(sx, sy);
+        }
+
+        // 1) TÚNEL VECTORIAL HIPNÓTICO EN PERSPECTIVA POLAR (16 SECTORES)
+        drawHypnoticTunnel(cx, cy, maxRadius, time, baseHue);
+
+        // 2) PROYECTILES LÁSER VECTORIALES
+        drawBullets(cx, cy, maxRadius, baseHue);
+
+        // 3) ENEMIGOS GEOMÉTRICOS 3D WIREFRAME
+        drawEnemies(cx, cy, maxRadius, baseHue);
+
+        // 4) NAVE VECTORIAL DEL JUGADOR EN EL ANILLO EXTERIOR
+        if (state.mode === 'PLAYING' || state.mode === 'PAUSED') {
+          drawPlayerShip(cx, cy, maxRadius, baseHue);
+        }
+
+        // 5) PARTÍCULAS VECTORIALES DE EXPLOSIÓN
+        drawParticles();
+
+        // 6) MENSAJES SUBLIMINALES DE 1-2 FRAMES (LEYENDA DE 1981)
+        if (state.subliminalFramesLeft > 0) {
+          drawSubliminalFlash(cx, cy, maxRadius);
+        }
+
+        // 7) OVERLAYS DE PANTALLA DE INICIO (ATTRACT MODE), PAUSA Y GAME OVER
+        if (state.mode === 'ATTRACT') {
+          drawAttractScreen(cx, cy, maxRadius, time, baseHue);
+        } else if (state.mode === 'PAUSED') {
+          drawCenteredBanner(cx, cy, 'SIMULATION PAUSED', 'PRESS [P] OR RESUME TO CONTINUE', '#00f7ff');
+        } else if (state.mode === 'GAMEOVER') {
+          drawCenteredBanner(
+            cx,
+            cy,
+            'NEURAL OVERLOAD // SUBJECT TERMINATED',
+            `FINAL SCORE: ${Math.floor(state.score)} — PRESS [SPACE] OR [FIRE] TO RE-ENTER`,
+            '#ff0055'
+          );
+        }
+
+        ctx.restore();
+      }
+
+      function drawHypnoticTunnel(cx, cy, maxRadius, time, baseHue) {
+        const sides = 16;
+        const ringCount = 9;
+        const speedMult = state.safeMode ? 0.35 : 0.75 + state.hypnosisLevel * 0.85;
+        const tunnelPhase = (time * speedMult) % 1;
+
+        ctx.lineWidth = 1.25;
+
+        // Rayos radiales que convergen en el punto de fuga
+        const twist = Math.sin(time * 0.9) * (state.safeMode ? 0.08 : 0.25 * state.hypnosisLevel);
+        ctx.strokeStyle = `hsla(${baseHue}, 100%, 52%, 0.26)`;
+        ctx.beginPath();
+        for (let s = 0; s < sides; s++) {
+          const ang = (s / sides) * Math.PI * 2;
+          const innerR = maxRadius * 0.03;
+          ctx.moveTo(cx + Math.cos(ang + twist) * innerR, cy + Math.sin(ang + twist) * innerR);
+          ctx.lineTo(cx + Math.cos(ang) * maxRadius, cy + Math.sin(ang) * maxRadius);
+        }
+        ctx.stroke();
+
+        // Anillos poligonales contrarrotatorios que avanzan hacia el jugador
+        for (let r = 0; r < ringCount; r++) {
+          const norm = (r + tunnelPhase) / ringCount;
+          // Curva exponencial para verdadera sensación de perspectiva 3D
+          const perspectiveRadius = Math.pow(norm, 1.85) * maxRadius;
+          if (perspectiveRadius < 4) continue;
+
+          const ringRot =
+            (r % 2 === 0 ? 1 : -1) * time * (state.safeMode ? 0.15 : 0.45) * (1 - norm * 0.5);
+          const ringHue = (baseHue + r * 26) % 360;
+          const alpha = 0.15 + norm * 0.55;
+
+          ctx.strokeStyle = `hsla(${ringHue}, 100%, 55%, ${alpha.toFixed(2)})`;
+          ctx.beginPath();
+          for (let s = 0; s <= sides; s++) {
+            const ang = (s / sides) * Math.PI * 2 + ringRot;
+            const px = cx + Math.cos(ang) * perspectiveRadius;
+            const py = cy + Math.sin(ang) * perspectiveRadius;
+            if (s === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.stroke();
+        }
+
+        // Anillo exterior principal (carril del jugador) con brillo de fósforo
+        ctx.save();
+        ctx.strokeStyle = `hsl(${baseHue}, 100%, 62%)`;
+        ctx.shadowColor = `hsl(${baseHue}, 100%, 55%)`;
+        ctx.shadowBlur = 12;
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, maxRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawPlayerShip(cx, cy, maxRadius, baseHue) {
+        // Parpadeo de invulnerabilidad al iniciar
+        if (state.player.invulnTimer > 0 && Math.floor(state.time * 16) % 2 === 0) {
+          return;
+        }
+
+        const ang = state.player.angle;
+        const r = maxRadius;
+        const px = cx + Math.cos(ang) * r;
+        const py = cy + Math.sin(ang) * r;
+
+        ctx.save();
+        ctx.translate(px, py);
+        // Apuntar hacia el centro del túnel (ang + PI)
+        ctx.rotate(ang + Math.PI);
+
+        const shipHue = (baseHue + 160) % 360;
+        ctx.strokeStyle = '#ffffff';
+        ctx.shadowColor = `hsl(${shipHue}, 100%, 60%)`;
+        ctx.shadowBlur = 14;
+        ctx.lineWidth = 2.4;
+
+        // Silueta clásica de garra vectorial tipo Tempest / Sinneslöschen
+        ctx.beginPath();
+        ctx.moveTo(18, 0);     // Punta mirando al centro
+        ctx.lineTo(-10, -15);  // Ala izquierda
+        ctx.lineTo(-4, 0);     // Muesca trasera
+        ctx.lineTo(-10, 15);   // Ala derecha
+        ctx.closePath();
+        ctx.stroke();
+
+        // Núcleo interno neón
+        ctx.strokeStyle = `hsl(${shipHue}, 100%, 65%)`;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(10, 0);
+        ctx.lineTo(-5, -7);
+        ctx.lineTo(-5, 7);
+        ctx.closePath();
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      function drawBullets(cx, cy, maxRadius, baseHue) {
+        ctx.save();
+        ctx.strokeStyle = '#39ff14';
+        ctx.shadowColor = '#39ff14';
+        ctx.shadowBlur = 10;
+        ctx.lineWidth = 2.5;
+
+        ctx.beginPath();
+        for (let i = 0; i < MAX_BULLETS; i++) {
+          const b = bullets[i];
+          if (!b.active) continue;
+          const r1 = Math.pow(b.depth, 1.4) * maxRadius;
+          const r2 = Math.pow(Math.max(0.01, b.depth - 0.06), 1.4) * maxRadius;
+          const cos = Math.cos(b.angle);
+          const sin = Math.sin(b.angle);
+          ctx.moveTo(cx + cos * r1, cy + sin * r1);
+          ctx.lineTo(cx + cos * r2, cy + sin * r2);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawEnemies(cx, cy, maxRadius, baseHue) {
+        for (let i = 0; i < MAX_ENEMIES; i++) {
+          const e = enemies[i];
+          if (!e.active) continue;
+
+          const perspective = Math.pow(e.depth, 1.4);
+          const r = perspective * maxRadius;
+          const ex = cx + Math.cos(e.angle) * r;
+          const ey = cy + Math.sin(e.angle) * r;
+          const size = 6 + perspective * 26;
+          const eHue = (baseHue + e.hueOffset + 120) % 360;
+
+          ctx.save();
+          ctx.translate(ex, ey);
+          ctx.rotate(e.spinAngle);
+
+          // Efecto opcional de aberración cromática en enemigos de alto nivel
+          if (!state.safeMode && (e.type >= 2 || state.chromaticShift > 1)) {
+            ctx.strokeStyle = 'rgba(255, 0, 85, 0.65)';
+            ctx.lineWidth = 1.6;
+            drawPolygonWireframe(ctx, e.type, size, 3, -2);
+          }
+
+          ctx.strokeStyle = `hsl(${eHue}, 100%, 62%)`;
+          ctx.shadowColor = `hsl(${eHue}, 100%, 55%)`;
+          ctx.shadowBlur = 10;
+          ctx.lineWidth = 2;
+
+          drawPolygonWireframe(ctx, e.type, size, 0, 0);
+          ctx.restore();
+        }
+      }
+
+      function drawPolygonWireframe(context, type, size, ox, oy) {
+        context.beginPath();
+        if (type === 0) {
+          // Triángulo vectorial afilado
+          for (let k = 0; k <= 3; k++) {
+            const a = (k / 3) * Math.PI * 2;
+            const x = ox + Math.cos(a) * size;
+            const y = oy + Math.sin(a) * size;
+            if (k === 0) context.moveTo(x, y);
+            else context.lineTo(x, y);
+          }
+        } else if (type === 1) {
+          // Doble rombo / Hipercubo rotatorio
+          for (let k = 0; k <= 4; k++) {
+            const a = (k / 4) * Math.PI * 2;
+            const x = ox + Math.cos(a) * size;
+            const y = oy + Math.sin(a) * size;
+            if (k === 0) context.moveTo(x, y);
+            else context.lineTo(x, y);
+          }
+          for (let k = 0; k <= 4; k++) {
+            const a = (k / 4) * Math.PI * 2 + Math.PI * 0.25;
+            const x = ox + Math.cos(a) * (size * 0.55);
+            const y = oy + Math.sin(a) * (size * 0.55);
+            if (k === 0) context.moveTo(x, y);
+            else context.lineTo(x, y);
+          }
+        } else if (type === 2) {
+          // Hexágono icosaédrico con radios internos
+          for (let k = 0; k < 6; k++) {
+            const a1 = (k / 6) * Math.PI * 2;
+            const a2 = ((k + 1) / 6) * Math.PI * 2;
+            context.moveTo(ox + Math.cos(a1) * size, oy + Math.sin(a1) * size);
+            context.lineTo(ox + Math.cos(a2) * size, oy + Math.sin(a2) * size);
+            context.moveTo(ox, oy);
+            context.lineTo(ox + Math.cos(a1) * size, oy + Math.sin(a1) * size);
+          }
+        } else {
+          // Estrella fractal de 8 puntas
+          for (let k = 0; k <= 8; k++) {
+            const a = (k / 8) * Math.PI * 2;
+            const rad = k % 2 === 0 ? size : size * 0.42;
+            const x = ox + Math.cos(a) * rad;
+            const y = oy + Math.sin(a) * rad;
+            if (k === 0) context.moveTo(x, y);
+            else context.lineTo(x, y);
+          }
+        }
+        context.stroke();
+      }
+
+      function drawParticles() {
+        ctx.save();
+        ctx.lineWidth = 2;
+        for (let i = 0; i < MAX_PARTICLES; i++) {
+          const p = particles[i];
+          if (!p.active) continue;
+          const alpha = 1 - p.life / p.maxLife;
+          ctx.strokeStyle = `hsla(${p.hue}, 100%, 65%, ${alpha.toFixed(2)})`;
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x - p.vx * 0.035, p.y - p.vy * 0.035);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawSubliminalFlash(cx, cy, maxRadius) {
+        ctx.save();
+        // Poliedro central hipnótico y palabra subliminal fugaz
+        const fontSize = Math.max(26, Math.floor(maxRadius * 0.24));
+        ctx.font = `bold ${fontSize}px "Courier New", monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Sombra cromática desplazada
+        ctx.fillStyle = 'rgba(255, 0, 85, 0.78)';
+        ctx.fillText(state.subliminalCurrentWord, cx - 4, cy + 2);
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+        ctx.fillText(state.subliminalCurrentWord, cx + 2, cy - 1);
+        ctx.restore();
+      }
+
+      function drawAttractScreen(cx, cy, maxRadius, time, baseHue) {
+        ctx.save();
+        // Caja semitransparente para garantizar máxima legibilidad sobre el túnel
+        const boxW = Math.min(state.width * 0.88, 560);
+        const boxH = Math.min(state.height * 0.64, 310);
+        ctx.fillStyle = 'rgba(3, 4, 12, 0.78)';
+        ctx.strokeStyle = `hsl(${baseHue}, 100%, 58%)`;
+        ctx.lineWidth = 2;
+        ctx.fillRect(cx - boxW * 0.5, cy - boxH * 0.5, boxW, boxH);
+        ctx.strokeRect(cx - boxW * 0.5, cy - boxH * 0.5, boxW, boxH);
+
+        // Título principal POLYBIUS con aberración cromática estilo CRT 1981
+        const titleSize = Math.clamp
+          ? Math.clamp(maxRadius * 0.28, 34, 68)
+          : Math.max(34, Math.min(68, maxRadius * 0.28));
+        ctx.font = `bold ${Math.floor(titleSize)}px "Courier New", monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        const glitchX = Math.sin(time * 24) * 2.5;
+        ctx.fillStyle = '#ff0055';
+        ctx.fillText('POLYBIUS', cx - 3 + glitchX, cy - boxH * 0.22);
+
+        ctx.fillStyle = '#00f7ff';
+        ctx.fillText('POLYBIUS', cx + 3 - glitchX, cy - boxH * 0.22);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('POLYBIUS', cx, cy - boxH * 0.22);
+
+        // Copyright oficial de la leyenda urbana
+        const subSize = Math.max(12, Math.min(18, maxRadius * 0.075));
+        ctx.font = `bold ${Math.floor(subSize)}px "Courier New", monospace`;
+        ctx.fillStyle = '#39ff14';
+        ctx.fillText('© 1981 SINNESLÖSCHEN INC.', cx, cy + 4);
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+        ctx.font = `${Math.floor(subSize * 0.85)}px "Courier New", monospace`;
+        ctx.fillText('PORTLAND, OR // BEHAVIORAL RESEARCH UNIT', cx, cy + 32);
+
+        // Texto parpadeante INSERT COIN / PRESS START
+        if (Math.floor(time * 2.6) % 2 === 0) {
+          ctx.fillStyle = '#ffbe0b';
+          ctx.font = `bold ${Math.floor(subSize * 1.1)}px "Courier New", monospace`;
+          ctx.fillText('PRESS [SPACE] OR TAP SCREEN TO START', cx, cy + boxH * 0.32);
+        }
+
+        ctx.restore();
+      }
+
+      function drawCenteredBanner(cx, cy, title, subtitle, color) {
+        ctx.save();
+        const boxW = Math.min(state.width * 0.9, 580);
+        const boxH = 140;
+        ctx.fillStyle = 'rgba(2, 3, 10, 0.88)';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.fillRect(cx - boxW * 0.5, cy - boxH * 0.5, boxW, boxH);
+        ctx.strokeRect(cx - boxW * 0.5, cy - boxH * 0.5, boxW, boxH);
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = color;
+        ctx.font = `bold ${Math.max(16, Math.min(26, boxW * 0.045))}px "Courier New", monospace`;
+        ctx.fillText(title, cx, cy - 18);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `${Math.max(11, Math.min(15, boxW * 0.026))}px "Courier New", monospace`;
+        ctx.fillText(subtitle, cx, cy + 22);
+        ctx.restore();
+      }
+
+      // --------------------------------------------------------------------------
+      // 8. BUCLE PRINCIPAL DE 60 FPS (WINDOW.ONLOAD)
+      // --------------------------------------------------------------------------
+      let lastTimestamp = 0;
+
+      function gameLoop(timestamp) {
+        if (!lastTimestamp) lastTimestamp = timestamp;
+        // Limitar dt a 50ms máximo para evitar saltos tras cambiar de pestaña
+        const dt = Math.min(0.05, (timestamp - lastTimestamp) / 1000);
+        lastTimestamp = timestamp;
+
+        update(dt);
+        render();
+
+        requestAnimationFrame(gameLoop);
+      }
+
+      window.onload = function () {
+        resizeCanvas();
+        requestAnimationFrame(gameLoop);
+      };
+    })();
+  </script>
+</body>
+</html>
